@@ -48,3 +48,19 @@
 # Help:
 #   help - Display this help message
 
+# Start Development
+dev:
+	docker compose -f docker/compose.development.yaml up --build
+
+# Start Production (Detached)
+prod:
+	docker compose -f docker/compose.production.yaml up -d --build
+
+# Stop containers
+down:
+	docker compose -f docker/compose.development.yaml down
+	docker compose -f docker/compose.production.yaml down
+
+# View Logs
+logs:
+	docker compose -f docker/compose.development.yaml logs -f
