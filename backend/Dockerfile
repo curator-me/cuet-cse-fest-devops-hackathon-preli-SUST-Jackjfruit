@@ -1,18 +1,22 @@
-# Production Dockerfile for Backend
-FROM node:20-alpine AS builder
-
+# Stage 1: Build
+FROM node:18-alpine AS builder
 WORKDIR /app
-
-# Copy package files
-COPY package* ./
-
-# Install dependencies
-# RUN npm ci --only=production && \
-#     npm ci --only=development
-RUN npm install
-
-# Copy source code
+COPY package*.json ./
+RUN npm ci --only=production
 COPY . .
 
-# Build TypeScript
+# Stage 2: Runtime (Distroless or Alpine)
+FROM node:18-alpine
+WORKDIR /app
+
+# Security: Don't run as root
+USER node 
+
+# Copy from builder
+COPY --from=builder /app ./
+
+# Env variables will be passed via Compose
+EXPOSE 3847 
+# (Note: Use 5921 for Gateway)
+
 CMD ["npm", "start"]
