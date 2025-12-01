@@ -4,3 +4,106 @@
   # gateway:
 
   # mongo:
+
+
+version: '3.9'
+
+services:
+  # MongoDB service - data persistence layer
+  mongo:
+    image: mongo:7.0-alpine
+    container_name: mongo_dev
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+    ports:
+      # MongoDB is NOT exposed to external network
+      - "127.0.0.1:27017:27017"
+    volumes:
+      # Data persistence - survives container restarts
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    networks:
+      - backend_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test -u ${MONGO_INITDB_ROOT_USERNAME} -p ${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # Backend API service - internal only
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.dev
+    container_name: backend_dev
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      BACKEND_PORT: ${BACKEND_PORT}
+      MONGO_URI: ${MONGO_URI}
+      MONGO_DATABASE: ${MONGO_DATABASE}
+    ports:
+      # Backend is NOT exposed externally - only via gateway
+      - "127.0.0.1:${BACKEND_PORT}:${BACKEND_PORT}"
+    volumes:
+      # Development hot-reload support
+      - ../backend/src:/app/src
+      - ../backend/package.json:/app/package.json
+      - ../backend/tsconfig.json:/app/tsconfig.json
+    networks:
+      - backend_network
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT}/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # Gateway service - only exposed to external network
+  gateway:
+    build:
+      context: ../gateway
+      dockerfile: Dockerfile.dev
+    container_name: gateway_dev
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      GATEWAY_PORT: ${GATEWAY_PORT}
+      BACKEND_URL: http://backend:${BACKEND_PORT}
+    ports:
+      # Gateway IS exposed to external clients
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
+    volumes:
+      # Development hot-reload support
+      - ../gateway/src:/app/src
+      - ../gateway/package.json:/app/package.json
+    networks:
+      - backend_network
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${GATEWAY_PORT}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+# Private network for internal communication
+networks:
+  backend_network:
+    driver: bridge
+
+# Volumes for data persistence
+volumes:
+  mongo_data:
+    driver: local
+  mongo_config:
+    driver: local
