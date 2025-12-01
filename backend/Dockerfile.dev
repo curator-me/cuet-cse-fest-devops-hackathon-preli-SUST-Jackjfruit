@@ -1,8 +1,17 @@
-FROM node:22
+FROM node:18-alpine
+
 WORKDIR /app
-COPY package* ./
+
+# Install dependencies first (caching layer)
+COPY package*.json ./
 RUN npm install
-RUN npm install --only=dev
+
+# Copy source code
 COPY . .
 
-CMD ["npm", "start"]
+# Use the port defined in the problem
+EXPOSE 3847 
+# (Note: Use 5921 for Gateway)
+
+# Start command for dev
+CMD ["npm", "run", "dev"]
