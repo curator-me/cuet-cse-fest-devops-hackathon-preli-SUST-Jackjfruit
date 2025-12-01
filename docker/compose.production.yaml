@@ -1,119 +1,41 @@
-# services:
-  # backend:
-
-  # gateway:
-
-  # mongo:
-
-version: '3.9'
+version: '3.8'
 
 services:
-  # MongoDB service - data persistence layer
-  # mongo:
-  #   image: mongo:7.0-alpine
-  #   container_name: mongo_prod
-  #   environment:
-  #     MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-  #     MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-  #     MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
-  #   # NO port exposure - internal only
-  #   volumes:
-  #     # Data persistence with named volumes for production reliability
-  #     - mongo_data:/data/db
-  #     - mongo_config:/data/configdb
-  #   networks:
-  #     - backend_network
-  #   healthcheck:
-  #     test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test -u ${MONGO_INITDB_ROOT_USERNAME} -p ${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 5
-  #     start_period: 10s
-  #   restart: always
-  #   # Security: limit resource usage
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '1'
-  #         memory: 512M
-  #       reservations:
-  #         cpus: '0.5'
-  #         memory: 256M
-  mongo:
-    image: mongo:8.2.1 # Official MongoDB image
-    container_name: mongo
-    ports:
-        - "27017:27017"
-    volumes:
-        - mongo_data:/data/db # Persist database data
-
-  # Backend API service - internal only
   backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    container_name: backend_prod
-    image: backend_prod:latest
-    environment:
-      NODE_ENV: production
-      BACKEND_PORT: 3847
-      MONGO_URI: "mongodb://localhost:27017"
-      MONGO_DATABASE: "cse2025"
-    # NO port exposure to external network
+    env_file:
+      - ../.env
     networks:
-      - backend_network
-    depends_on:
-      mongo:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3847/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    restart: always
-    # Security and resource limits
+      - app-network
 
-
-  # Gateway service - only exposed to external network
   gateway:
     build:
       context: ../gateway
       dockerfile: Dockerfile
-    container_name: gateway_prod
-    image: gateway_prod:latest
-    environment:
-      NODE_ENV: production
-      GATEWAY_PORT: 5921
-      BACKEND_URL: http://backend:3847
     ports:
-      # Only gateway is exposed - port 5921 to external clients
-      - 5921:5921
-    networks:
-      - backend_network
+      - "5921:5921"            
+    env_file:
+      - ../.env
     depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5921/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    restart: always
-    # Security and resource limits
+      - backend
+    networks:
+      - app-network
 
-# Private network for internal communication - services cannot communicate externally
+  mongodb:
+    image: mongo:6
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo_data:/data/db    
+    networks:
+      - app-network
+
 networks:
-  backend_network:
+  app-network:
     driver: bridge
-    driver_opts:
-      # Restrict network communication to containers only
-      com.docker.network.bridge.enable_ip_masquerade: "true"
 
-# Named volumes for production data persistence
 volumes:
   mongo_data:
-    driver: local
-  mongo_config:
-    driver: local
