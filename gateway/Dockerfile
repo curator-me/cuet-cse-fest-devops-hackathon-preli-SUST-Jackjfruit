@@ -1,18 +1,32 @@
-# Production Dockerfile for Backend
-FROM node:20-alpine AS builder
+# ----------------------
+# 1️⃣ Build Stage
+# ----------------------
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
 # Copy package files
-COPY package* ./
+COPY package*.json ./
 
-# Install dependencies
-# RUN npm ci --only=production && \
-#     npm ci --only=development
-RUN npm install
+# Install ONLY production dependencies
+RUN npm ci --only=production
 
 # Copy source code
 COPY . .
 
-# Build TypeScript
-RUN ["npm", "start"]
+# ----------------------
+# 2️⃣ Runtime Stage
+# ----------------------
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+# Copy node_modules & code from build stage
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app ./
+
+# Expose gateway port
+EXPOSE 5921
+
+# Run server (no hot reload)
+CMD ["npm", "start"]
